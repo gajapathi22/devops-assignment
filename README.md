@@ -41,7 +41,7 @@ devops-assignment/
     │   └── monitoring/
     │       └── prometheus-values.yaml  # Monitoring configuration
     └── deploy.sh                 # Deployment script
-
+```
 
 ## Prerequisites
 
