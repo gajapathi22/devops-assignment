@@ -101,6 +101,26 @@ minikube start --driver=docker --memory=4096 --cpus=2
 cd k8s
 chmod +x deploy.sh
 ./deploy.sh
+
+# Create NodePort service for external access
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-app-public
+  labels:
+    app: devops-app
+spec:
+  type: NodePort
+  selector:
+    app: devops-app
+  ports:
+  - port: 80
+    targetPort: 3000
+    nodePort: 30080
+    protocol: TCP
+    name: http
+EOF
 ```
 
 ### 4. Monitoring Configuration
@@ -150,31 +170,70 @@ nodeExporter:
 
 ## Application Access
 
-### External Access (from Internet)
+### NodePort Services Configuration
 
-```bash
-# Get VM public IP
-terraform output vm_public_ip
-
-# Application endpoints
-http://<VM_PUBLIC_IP>:30080/          # Application home
-http://<VM_PUBLIC_IP>:30080/health    # Health check
-http://<VM_PUBLIC_IP>:30080/status    # Status endpoint
-
-# Grafana dashboard
-http://<VM_PUBLIC_IP>:32000           # Username: admin, Password: admin123
+**Application Service** (`app-nodeport.yaml`):
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-app-public
+  labels:
+    app: devops-app
+spec:
+  type: NodePort
+  selector:
+    app: devops-app
+  ports:
+  - port: 80
+    targetPort: 3000
+    nodePort: 30080
+    protocol: TCP
+    name: http
 ```
 
-### Internal Access (from VM)
+**Grafana Service**: Already exposed via NodePort on port 32000 through Helm values configuration.
+
+**Prometheus Service**: Accessible via port-forwarding within the VM.
+
+### SSH Tunneling for Local Access
+
+Since Minikube runs on an isolated network within the Azure VM, local access requires SSH tunneling:
+
+#### Application Access
+```bash
+ssh -i ~/Desktop/projects/devops-assignment/infrastructure/devops-vm-key.pem -L 30080:192.168.49.2:80 azureuser@<VM_PUBLIC_IP>
+```
+Then access: `http://localhost:30080`
+
+#### Grafana Dashboard Access
+```bash
+ssh -i ~/Desktop/projects/devops-assignment/infrastructure/devops-vm-key.pem -L 32000:192.168.49.2:32000 azureuser@<VM_PUBLIC_IP>
+```
+Then access: `http://localhost:32000` (Username: admin, Password: admin123)
+
+#### Prometheus Access
+First, on the VM, create port-forward:
+```bash
+kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
+```
+
+Then from local machine, create SSH tunnel:
+```bash
+ssh -i ~/Desktop/projects/devops-assignment/infrastructure/devops-vm-key.pem -L 9090:localhost:9090 azureuser@<VM_PUBLIC_IP>
+```
+Then access: `http://localhost:9090`
+
+### Internal VM Access
 
 ```bash
-# Via Ingress
-http://192.168.49.2/
-http://192.168.49.2/health
+# SSH into VM first
+ssh -i ~/Desktop/projects/devops-assignment/infrastructure/devops-vm-key.pem azureuser@<VM_PUBLIC_IP>
 
-# Prometheus (port-forward required)
-kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
-# Then access: http://localhost:9090
+# Then access via Minikube internal network
+http://192.168.49.2/          # Application via Ingress
+http://192.168.49.2:32000     # Grafana
+# Prometheus requires port-forward: kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
 ```
 
 ## Services Configuration
