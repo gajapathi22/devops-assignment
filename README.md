@@ -278,7 +278,7 @@ http://192.168.49.2:32000     # Grafana
 # Check application
 kubectl get pods
 kubectl get services
-curl http://<VM_PUBLIC_IP>:30080/health
+curl http://<Minikube_IP>:30080/health or http://localhost:30080/health (After tunneling)
 
 # Check monitoring
 kubectl get pods -n monitoring
